@@ -1,0 +1,123 @@
+general:
+  log_level: info
+  cache_ttl_hours: 24
+  cost_budget_daily_usd: 2.00
+
+session:
+  auto_resume: true
+  session_ttl_hours: 72
+  max_turns_before_compaction: 200
+
+  sliding_window:
+    tier1_system_tokens: 400
+    tier2_summary_max_tokens: 1500
+    tier3_recent_max_tokens: 6000
+    tier4_code_max_tokens: 6000
+    tier5_prompt_max_tokens: 2800
+    latency_pressure_reduction: 0.6
+
+  importance:
+    mode: heuristic
+    evict_below_score: 0.3
+    summarize_batch_size: 5
+
+  intervention_summary:
+    enabled: true
+    max_tokens: 400
+    trigger_after_local_turns: 3
+
+  thread_tracking:
+    keep_alive_timeout_min: 30
+    prefer_thread_reuse: true
+    thread_reuse_latency_bonus_ms: 1500
+
+  persistence:
+    db_path: ./data/sessions.db
+    export_format: markdown
+
+local_model:
+  primary: qwen2.5-coder-7b-q4
+  fast: codegemma-2b-q4
+  fallback: phi3-mini-q4
+  inference_engine: ollama
+  max_tokens: 4096
+  temperature: 0.2
+  gpu_layers: 35
+
+latency:
+  predictor_mode: heuristic
+  ml_model_path: ./data/latency_model.bin
+  calibration_on_startup: true
+  recalibrate_interval_hours: 168
+  system_monitor_interval_ms: 1000
+  network_probe_interval_s: 60
+  prediction_confidence_threshold: 0.60
+
+  output_estimation:
+    intent_prior_weight: 0.30
+    input_ratio_weight: 0.25
+    similar_prompt_weight: 0.35
+    verbosity_cue_weight: 0.10
+
+patience:
+  profile: default
+  auto_learn: true
+  instant_threshold_ms: 2000
+  acceptable_threshold_ms: 5000
+  tolerable_threshold_ms: 15000
+  abandon_threshold_ms: 30000
+  streaming_patience_multiplier: 1.8
+  ttft_critical_ms: 3000
+
+routing:
+  weights:
+    latency: 0.40
+    quality: 0.30
+    cost: 0.15
+    reliability: 0.15
+  force_cloud_intents:
+    - security_audit
+    - architecture_design
+  force_local_intents:
+    - explain_code
+    - format_code
+    - write_docstring
+    - git_commit_message
+  race_mode_confidence_threshold: 0.60
+
+cloud_backends:
+  preferred_order:
+    - gemini_cli
+    - claude_code
+    - cursor_agent
+  gemini_cli:
+    enabled: true
+    command: gemini
+    max_tokens: 8192
+    timeout_ms: 20000
+  claude_code:
+    enabled: true
+    command: claude
+    max_tokens: 8192
+    timeout_ms: 30000
+  cursor_agent:
+    enabled: false
+    command: cursor
+    max_tokens: 8192
+    timeout_ms: 45000
+
+compression:
+  enabled: true
+  strip_imports: true
+  summarize_threshold_lines: 100
+  max_context_tokens: 4000
+  rewrite_prompts: true
+  latency_aware: true
+  aggressive_compression_headroom_ms: 1000
+
+feedback:
+  enabled: true
+  db_path: ./data/feedback.db
+  retrain_interval_days: 7
+  min_samples_for_ml: 200
+  drift_alert_mae_threshold: 0.40

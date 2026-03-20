@@ -1,0 +1,12 @@
+FROM rust:latest
+
+# Install runtime dependencies
+RUN apt-get update && apt-get install -y \
+    libssl3 \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /work
+
+# Binary should already be built, just run it
+CMD ["./target/release/lokahi"]

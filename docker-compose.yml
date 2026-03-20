@@ -1,0 +1,47 @@
+version: '3.8'
+
+services:
+  ollama:
+    image: ollama/ollama:latest
+    container_name: lokahi_ollama
+    ports:
+      - "11435:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    environment:
+      - OLLAMA_HOST=0.0.0.0:11434
+    networks:
+      - lokahi_net
+
+  lokahi:
+    build:
+      context: .
+      dockerfile: Dockerfile.lokahi
+    container_name: lokahi_app
+    depends_on:
+      - ollama
+    volumes:
+      - .:/work
+      - /home/rickeshtn:/host
+      - lokahi_sessions:/work/data
+    working_dir: /work
+    environment:
+      - RUST_LOG=info
+      - OLLAMA_HOST=http://ollama:11434
+      - OLLAMA_MODEL=tinyllama
+      - HOST_HOME=/host
+    networks:
+      - lokahi_net
+    stdin_open: true
+    tty: true
+    command: ./target/release/lokahi
+
+volumes:
+  ollama_data:
+    driver: local
+  lokahi_sessions:
+    driver: local
+
+networks:
+  lokahi_net:
+    driver: bridge

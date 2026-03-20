@@ -1,0 +1,29 @@
+# Rust
+target/
+Cargo.lock
+*.rlib
+*.rmeta
+*.so
+*.dylib
+*.dll
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Data
+data/
+*.db
+*.db-shm
+*.db-wal
+
+# Logs
+*.log
+
+# Environment
+.env
+.env.local
