@@ -24,16 +24,16 @@ services:
       - .:/work
       - /home/rickeshtn:/host
       - lokahi_sessions:/work/data
-      - /usr/local/bin:/usr/local/bin:ro
-      - /home/rickeshtn/.cargo/bin:/usr/local/cargo/bin:ro
-      - /home/rickeshtn/.local/bin:/usr/local/local/bin:ro
+      - /home/rickeshtn/.nvm:/home/rickeshtn/.nvm:ro
+      - /home/rickeshtn/.claude:/home/rickeshtn/.claude:ro
     working_dir: /work
     environment:
       - RUST_LOG=info
       - OLLAMA_HOST=http://ollama:11434
       - OLLAMA_MODEL=tinyllama
       - HOST_HOME=/host
-      - PATH=/usr/local/cargo/bin:/usr/local/local/bin:/usr/local/bin:$PATH
+      - HOME=/home/rickeshtn
+      - PATH=/home/rickeshtn/.nvm/versions/node/v22.14.0/bin:/usr/local/cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
     networks:
       - lokahi_net
     stdin_open: true
