@@ -47,6 +47,33 @@ Type your prompt:
 - `/clear` — Clear session
 - Arrow Keys ⬆️⬇️ — Navigate command history
 
+## Installation
+
+Choose your preferred method:
+
+1. **Quick Install** (Recommended)
+   ```bash
+   bash <(curl -fsSL https://raw.githubusercontent.com/rickeshtn/lokahi/main/install.sh)
+   ```
+
+2. **NPM** (for Node.js users)
+   ```bash
+   npm install -g lokahi-cli
+   ```
+
+3. **Cargo** (for Rust users)
+   ```bash
+   cargo install lokahi
+   ```
+
+4. **From Source**
+   ```bash
+   git clone https://github.com/rickeshtn/lokahi
+   cd lokahi && cargo build --release
+   ```
+
+See [INSTALL.md](./INSTALL.md) for detailed setup, troubleshooting, and verification.
+
 ## Architecture
 
 ```
@@ -81,7 +108,7 @@ lokahi/
 │   │   ├── claude.rs               # Claude CLI backend
 │   │   ├── gemini.rs               # Gemini CLI backend
 │   │   └── cursor.rs               # Cursor Agent stub
-│   ├── tui/                         # Terminal UI (TBD)
+│   ├── tui/                         # Terminal UI (stdin/stdout + rustyline)
 │   ├── assembler/
 │   │   └── merge.rs                # Response merging & validation
 │   └── feedback/
@@ -251,14 +278,14 @@ cargo test routing_tests
 
 ## Development Roadmap
 
-### Phase 1 (Current)
+### Phase 1 (Current) — Complete
 - ✅ Session Manager + SQLite
 - ✅ Sliding window context + importance scoring
 - ✅ Heuristic latency predictor
 - ✅ Prompt balancer/router
-- ⏳ TUI shell
-- ⏳ Ollama lifecycle management
-- ⏳ Integration tests
+- ✅ TUI shell (stdin/stdout with rustyline history)
+- ✅ Ollama lifecycle management (auto-start/stop, model pulling)
+- ✅ Integration tests (16/16 passing)
 
 ### Phase 2
 - ML-based latency predictor (XGBoost)
