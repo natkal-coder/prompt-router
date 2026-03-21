@@ -19,28 +19,27 @@ use crate::session::context_builder::{ContextBuilder, ContextPayload};
 
 /// Convert host paths to Docker container paths
 fn translate_path_for_docker(input: &str) -> String {
-    let host_home = env::var("HOST_HOME").unwrap_or_else(|_| "/host".to_string());
-
-    // Handle ~/Projects specially → /work/projects
-    if input.starts_with("~/Projects") {
-        return input.replace("~/Projects", "/work/projects");
-    }
-
-    // Handle ~/other paths → /host/other
+    // Handle home directory expansion: ~ → /host_home
     if input.starts_with("~/") {
-        return format!("{}/{}", host_home, &input[2..]);
+        return input.replace("~", "/host_home");
+    }
+    if input == "~" {
+        return "/host_home".to_string();
     }
 
-    // /home/rickeshtn/Projects/... → /work/projects/...
-    if input.starts_with("/home/") && input.contains("Projects") {
-        return input.replace("/home/rickeshtn/Projects", "/work/projects");
+    // Handle absolute paths from home: /home/rickeshtn → /host_home
+    if input.starts_with("/home/rickeshtn/") {
+        return input.replace("/home/rickeshtn/", "/host_home/");
+    }
+    if input == "/home/rickeshtn" {
+        return "/host_home".to_string();
     }
 
-    // /home/rickeshtn/... → /host/rickeshtn/...
-    if input.starts_with("/home/") {
-        let rest = &input[6..]; // Remove "/home/"
-        return format!("{}/{}", host_home, rest);
+    // Handle root filesystem: /path → /host_root/path
+    if input.starts_with("/") {
+        return format!("/host_root{}", input);
     }
+
     input.to_string()
 }
 

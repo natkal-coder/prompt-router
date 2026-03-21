@@ -22,8 +22,8 @@ services:
       - ollama
     volumes:
       - .:/work
-      - /home/rickeshtn:/host
-      - /home/rickeshtn/Projects:/work/projects:ro
+      - /home/rickeshtn:/host_home:ro
+      - /:/host_root:ro
       - lokahi_sessions:/work/data
       - /home/rickeshtn/.nvm:/home/rickeshtn/.nvm:ro
       - /home/rickeshtn/.claude:/home/rickeshtn/.claude:ro
