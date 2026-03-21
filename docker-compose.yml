@@ -22,11 +22,11 @@ services:
       - ollama
     volumes:
       - .:/work
-      - /home/rickeshtn:/host_home:ro
-      - /:/host_root:ro
+      - /home/rickeshtn:/host_home
+      - /:/host_root
       - lokahi_sessions:/work/data
-      - /home/rickeshtn/.nvm:/home/rickeshtn/.nvm:ro
-      - /home/rickeshtn/.claude:/home/rickeshtn/.claude:ro
+      - /home/rickeshtn/.nvm:/home/rickeshtn/.nvm
+      - /home/rickeshtn/.claude:/home/rickeshtn/.claude
     working_dir: /work
     environment:
       - RUST_LOG=info
