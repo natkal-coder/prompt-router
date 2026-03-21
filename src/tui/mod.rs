@@ -285,13 +285,16 @@ pub async fn run(
 
                     match result {
                         Ok(mut rx) => {
+                            print!("\n");
+                            io::stdout().flush().ok();
                             let mut response = String::new();
                             while let Ok(Some(chunk)) = io::Result::Ok(rx.recv().await) {
                                 response.push_str(&chunk);
                             }
 
-                            // Print formatted response
-                            print_formatted(&response);
+                            // Format and print response
+                            let formatted = format_markdown(&response);
+                            print!("{}", formatted);
                             println!();
 
                             // Save to history
@@ -340,43 +343,51 @@ pub async fn run(
     Ok(())
 }
 
-fn print_formatted(text: &str) {
-    let mut in_code_block = false;
+fn format_markdown(text: &str) -> String {
+    let mut output = String::new();
+    let mut in_code = false;
 
     for line in text.lines() {
-        // Code block handling
+        // Code blocks
         if line.trim().starts_with("```") {
-            in_code_block = !in_code_block;
-            if in_code_block {
-                println!("\n┌─────────────── CODE BLOCK ───────────────┐");
+            in_code = !in_code;
+            if in_code {
+                output.push_str("\n╭─ CODE ─────────────────────╮\n");
             } else {
-                println!("└──────────────────────────────────────────┘\n");
+                output.push_str("\n╰─────────────────────────────╯\n");
             }
             continue;
         }
 
-        if in_code_block {
-            println!("  {}", line);
+        if in_code {
+            output.push_str("  ");
+            output.push_str(line);
+            output.push('\n');
             continue;
         }
 
-        // Markdown formatting
-        if line.starts_with("# ") {
-            println!("\n╔═ {} ═╗", &line[2..]);
-        } else if line.starts_with("## ") {
-            println!("\n├─ {} ─┤", &line[3..]);
+        // Headers with spacing
+        if line.starts_with("## ") {
+            output.push_str("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+            output.push_str(&line[3..]);
+            output.push_str("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
         } else if line.starts_with("### ") {
-            println!("  → {}", &line[4..]);
-        } else if line.starts_with("- ") || line.starts_with("* ") {
-            println!("  • {}", &line[2..]);
-        } else if line.starts_with("|") {
-            println!("{}", line);
-        } else if line.starts_with(">") {
-            println!("  ┃ {}", &line[1..].trim());
+            output.push_str("\n▸ ");
+            output.push_str(&line[4..]);
+            output.push('\n');
+        } else if line.starts_with("- ") {
+            output.push_str("  • ");
+            output.push_str(&line[2..]);
+            output.push('\n');
+        } else if line.starts_with("| ") {
+            output.push_str(line);
+            output.push('\n');
         } else if !line.trim().is_empty() {
-            println!("{}", line);
+            output.push_str(line);
+            output.push('\n');
         } else {
-            println!();
+            output.push('\n');
         }
     }
+    output
 }
