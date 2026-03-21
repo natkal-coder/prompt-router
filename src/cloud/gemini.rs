@@ -65,9 +65,16 @@ impl CloudBackend for GeminiBackend {
         &self,
         context: &ContextPayload,
     ) -> Result<tokio::sync::mpsc::Receiver<String>> {
-        let (tx, rx) = tokio::sync::mpsc::channel(100);
         let prompt = self.build_prompt(context);
         let command = self.command.clone();
+
+        // Test spawn to check if command exists
+        match Command::new(&command).stdin(Stdio::piped()).stdout(Stdio::piped()).spawn() {
+            Err(e) => return Err(anyhow::anyhow!("Gemini command failed: {}", e)),
+            Ok(_) => {} // Command exists, continue
+        }
+
+        let (tx, rx) = tokio::sync::mpsc::channel(100);
 
         tokio::spawn(async move {
             match Command::new(&command)
