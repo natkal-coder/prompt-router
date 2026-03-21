@@ -194,10 +194,17 @@ pub async fn run(
 
                     // Temporarily set project_root to scanned path
                     let original_root = sess.project_root.clone();
-                    sess.project_root = context_path;
+                    eprintln!("\n🔎 CONTEXT BUILDER DEBUG:");
+                    eprintln!("   Original project_root: {}", original_root);
+                    eprintln!("   Context scan path: {}", context_path);
+                    sess.project_root = context_path.clone();
 
                     // Build context for the primary backend candidate (Claude for now)
+                    eprintln!("   Building context from: {}", sess.project_root);
                     let payload = ContextBuilder::build(&sess, &translated_input, "claude", &config, false);
+                    eprintln!("   Tier1 tokens: {}, Tier4 tokens: {}",
+                        payload.metadata.tier_tokens[0],
+                        payload.metadata.tier_tokens[3]);
                     let metrics = payload.metrics();
 
                     // Restore original project_root

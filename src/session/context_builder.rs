@@ -315,15 +315,53 @@ impl ContextBuilder {
         text
     }
 
-    fn build_tier4(session: &Session, _max_tokens: u32) -> String {
+    fn build_tier4(session: &Session, max_tokens: u32) -> String {
         let mut text = String::new();
+        let mut token_count = 0u32;
+        let mut file_count = 0;
+        let max_file_size = 30000;  // Max 30KB per file
 
-        for file in session.active_files.iter().take(5) {
-            text.push_str(&format!("--- {} ---\n", file));
-            // In a real implementation, read the file from disk
-            text.push_str("(file content would go here)\n\n");
+        // Read files from the session's project_root
+        if let Ok(entries) = std::fs::read_dir(&session.project_root) {
+            for entry in entries.flatten() {
+                if token_count >= max_tokens { break; }
+
+                if let Ok(file_type) = entry.file_type() {
+                    if file_type.is_file() {
+                        let path = entry.path();
+                        if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
+                            // Prioritize markdown files, then code
+                            let is_markdown = ext == "md";
+                            if matches!(ext, "md" | "txt" | "rs" | "py" | "js" | "ts" | "go" | "java") {
+                                // Skip very large files
+                                if let Ok(metadata) = std::fs::metadata(&path) {
+                                    if metadata.len() < max_file_size {
+                                        if let Ok(content) = std::fs::read_to_string(&path) {
+                                            let file_tokens = Self::estimate_tokens(&content);
+                                            if token_count + file_tokens <= max_tokens {
+                                                if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
+                                                    // Truncate very long files
+                                                    let display_content = if content.len() > 10000 {
+                                                        format!("{}... (truncated)", &content[..10000])
+                                                    } else {
+                                                        content
+                                                    };
+                                                    text.push_str(&format!("--- {} ---\n{}\n\n", name, display_content));
+                                                    token_count += file_tokens;
+                                                    file_count += 1;
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
 
+        eprintln!("   Tier4 scanned: {} files, {} tokens", file_count, token_count);
         text
     }
 
