@@ -287,11 +287,12 @@ pub async fn run(
                         Ok(mut rx) => {
                             let mut response = String::new();
                             while let Ok(Some(chunk)) = io::Result::Ok(rx.recv().await) {
-                                print!("{}", chunk);
                                 response.push_str(&chunk);
-                                io::stdout().flush().ok();
                             }
-                            println!("\n");
+
+                            // Print formatted response
+                            print_formatted(&response);
+                            println!();
 
                             // Save to history
                             let user_turn = Turn::new_user(input.to_string(), 100);
@@ -337,4 +338,45 @@ pub async fn run(
     }
 
     Ok(())
+}
+
+fn print_formatted(text: &str) {
+    let mut in_code_block = false;
+
+    for line in text.lines() {
+        // Code block handling
+        if line.trim().starts_with("```") {
+            in_code_block = !in_code_block;
+            if in_code_block {
+                println!("\n┌─────────────── CODE BLOCK ───────────────┐");
+            } else {
+                println!("└──────────────────────────────────────────┘\n");
+            }
+            continue;
+        }
+
+        if in_code_block {
+            println!("  {}", line);
+            continue;
+        }
+
+        // Markdown formatting
+        if line.starts_with("# ") {
+            println!("\n╔═ {} ═╗", &line[2..]);
+        } else if line.starts_with("## ") {
+            println!("\n├─ {} ─┤", &line[3..]);
+        } else if line.starts_with("### ") {
+            println!("  → {}", &line[4..]);
+        } else if line.starts_with("- ") || line.starts_with("* ") {
+            println!("  • {}", &line[2..]);
+        } else if line.starts_with("|") {
+            println!("{}", line);
+        } else if line.starts_with(">") {
+            println!("  ┃ {}", &line[1..].trim());
+        } else if !line.trim().is_empty() {
+            println!("{}", line);
+        } else {
+            println!();
+        }
+    }
 }
