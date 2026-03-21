@@ -21,10 +21,24 @@ fn translate_path_for_docker(input: &str) -> String {
     if input.starts_with("~/") {
         return format!("{}/{}", host_home, &input[2..]);
     }
+    // /home/rickeshtn/... → /host/rickeshtn/...
     if input.starts_with("/home/") {
-        return format!("{}{}", host_home, &input[6..]);
+        let rest = &input[6..]; // Remove "/home/"
+        return format!("{}/{}", host_home, rest);
     }
     input.to_string()
+}
+
+/// Extract path from user input if present
+fn extract_path_from_input(input: &str) -> Option<String> {
+    for word in input.split_whitespace() {
+        if word.contains('/') || word.contains('~') {
+            // Found a path-like token, strip trailing punctuation
+            let path = word.trim_end_matches(|c| matches!(c, '?' | '!' | '.' | ',' | ':' | ';'));
+            return Some(path.to_string());
+        }
+    }
+    None
 }
 
 pub async fn run(
@@ -160,7 +174,27 @@ pub async fn run(
 
                 // Call Ollama
                 if let Some(mut sess) = session.current_session_mut() {
+                    // Extract path from input for filesystem context
+                    let context_path = if let Some(path) = extract_path_from_input(input) {
+                        // If asking about lokahi directory, use /work (current dir in container)
+                        if path.contains("lokahi") {
+                            "/work".to_string()
+                        } else {
+                            translate_path_for_docker(&path)
+                        }
+                    } else {
+                        sess.project_root.clone()
+                    };
+
+                    // Temporarily set project_root to scanned path
+                    let original_root = sess.project_root.clone();
+                    sess.project_root = context_path;
+
                     let payload = ContextBuilder::build(&sess, &translated_input, "ollama", &config, false);
+
+                    // Restore original project_root
+                    sess.project_root = original_root;
+
                     let prompt = format!(
                         "{}\n{}\n{}\n{}\n{}",
                         payload.tier1_system,

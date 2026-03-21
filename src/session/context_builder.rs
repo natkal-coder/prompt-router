@@ -152,8 +152,10 @@ impl ContextBuilder {
 
         // Add directory structure if available
         if let Ok(structure) = Self::scan_directory(&session.project_root, 3) {
-            result.push_str("\n\nProject Structure:\n");
-            result.push_str(&structure);
+            if !structure.is_empty() {
+                result.push_str("\n\nProject Structure:\n");
+                result.push_str(&structure);
+            }
         }
 
         result
@@ -178,7 +180,8 @@ impl ContextBuilder {
 
         let indent = "  ".repeat(depth);
 
-        if let Ok(entries) = fs::read_dir(path) {
+        match fs::read_dir(path) {
+            Ok(entries) => {
             let mut items: Vec<_> = entries.collect();
             items.sort_by_key(|a| {
                 a.as_ref()
@@ -217,6 +220,10 @@ impl ContextBuilder {
                         }
                     }
                 }
+            }
+            }
+            Err(_) => {
+                // Directory not readable, skip
             }
         }
 
