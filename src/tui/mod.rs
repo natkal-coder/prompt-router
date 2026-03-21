@@ -19,28 +19,29 @@ use crate::session::context_builder::{ContextBuilder, ContextPayload};
 
 /// Convert host paths to Docker container paths
 fn translate_path_for_docker(input: &str) -> String {
-    // Handle home directory expansion: ~ → /host_home
-    if input.starts_with("~/") {
-        return input.replace("~", "/host_home");
-    }
-    if input == "~" {
-        return "/host_home".to_string();
+    let result = if input.starts_with("~/") {
+        input.replace("~", "/host_home")
+    } else if input == "~" {
+        "/host_home".to_string()
+    } else if input.starts_with("/home/rickeshtn/") {
+        input.replace("/home/rickeshtn/", "/host_home/")
+    } else if input == "/home/rickeshtn" {
+        "/host_home".to_string()
+    } else if input.starts_with("/") {
+        format!("/host_root{}", input)
+    } else {
+        input.to_string()
+    };
+
+    eprintln!("\n📍 PATH TRANSLATION: '{}' → '{}'", input, result);
+    eprintln!("   Checking access...");
+    if std::path::Path::new(&result).exists() {
+        eprintln!("   ✓ Path exists and accessible");
+    } else {
+        eprintln!("   ✗ Path NOT accessible: {}", result);
     }
 
-    // Handle absolute paths from home: /home/rickeshtn → /host_home
-    if input.starts_with("/home/rickeshtn/") {
-        return input.replace("/home/rickeshtn/", "/host_home/");
-    }
-    if input == "/home/rickeshtn" {
-        return "/host_home".to_string();
-    }
-
-    // Handle root filesystem: /path → /host_root/path
-    if input.starts_with("/") {
-        return format!("/host_root{}", input);
-    }
-
-    input.to_string()
+    result
 }
 
 /// Extract path from user input if present
@@ -60,6 +61,15 @@ pub async fn run(
     session_name: Option<String>,
     _explain: bool,
 ) -> Result<()> {
+    // Debug: Print mount points
+    eprintln!("\n🔍 DOCKER MOUNT DEBUG:");
+    eprintln!("   /work → {}", std::path::Path::new("/work").exists());
+    eprintln!("   /host_home → {}", std::path::Path::new("/host_home").exists());
+    eprintln!("   /host_root → {}", std::path::Path::new("/host_root").exists());
+    if let Ok(entries) = std::fs::read_dir("/host_home") {
+        eprintln!("   /host_home contents: {} items", entries.count());
+    }
+
     // Initialize systems
     let db_path = project_root.join("sessions.db").to_string_lossy().to_string();
     let config = Config::load_or_default()?;
