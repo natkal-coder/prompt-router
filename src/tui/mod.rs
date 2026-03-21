@@ -15,7 +15,7 @@ use crate::cloud::gemini::GeminiBackend;
 use crate::cloud::adapter::CloudBackend;
 use crate::feedback::collector::FeedbackCollector;
 use crate::intake::parser::{classify_intent, analyze_prompt};
-use crate::session::context_builder::ContextBuilder;
+use crate::session::context_builder::{ContextBuilder, ContextPayload};
 
 /// Convert host paths to Docker container paths
 fn translate_path_for_docker(input: &str) -> String {
@@ -157,24 +157,8 @@ pub async fn run(
                     0.5,
                 )?;
 
-                let decision = router.decide(intent, &estimate);
-
-                // Show routing decision with complexity info
-                let complexity = if input.len() > 200 || input.matches("~").count() > 2 {
-                    "HIGH"
-                } else if input.len() > 100 {
-                    "MEDIUM"
-                } else {
-                    "LOW"
-                };
-
-                println!("\n🔀 Route: {} | Complexity: {} | Est. {}ms\n",
-                    decision.route, complexity, estimate.local_ms);
-                print!("🤖 Assistant: ");
-                io::stdout().flush().ok();
-
-                // Call Ollama
-                if let Some(mut sess) = session.current_session_mut() {
+                // BUILD CONTEXT BEFORE ROUTING (for context-aware complexity scoring)
+                let (payload, context_metrics) = if let Some(mut sess) = session.current_session_mut() {
                     // Extract path from input for filesystem context
                     let context_path = if let Some(path) = extract_path_from_input(input) {
                         // If asking about lokahi directory, use /work (current dir in container)
@@ -191,16 +175,38 @@ pub async fn run(
                     let original_root = sess.project_root.clone();
                     sess.project_root = context_path;
 
-                    let backend_name = match decision.route {
-                        Route::CloudClaude => "claude",
-                        Route::CloudGemini => "gemini",
-                        _ => "ollama",
-                    };
-
-                    let payload = ContextBuilder::build(&sess, &translated_input, backend_name, &config, false);
+                    // Build context for the primary backend candidate (Claude for now)
+                    let payload = ContextBuilder::build(&sess, &translated_input, "claude", &config, false);
+                    let metrics = payload.metrics();
 
                     // Restore original project_root
                     sess.project_root = original_root;
+
+                    (payload, metrics)
+                } else {
+                    // No session - use empty context metrics
+                    (ContextPayload::default(), crate::latency::ContextMetrics::default())
+                };
+
+                // NOW route with context-aware scoring
+                let decision = router.decide(intent, &estimate, &context_metrics);
+
+                // Show routing decision with context-aware complexity
+                let complexity = if context_metrics.total_payload_tokens > 4000 || context_metrics.num_turns > 10 {
+                    "HIGH"
+                } else if context_metrics.total_payload_tokens > 2000 {
+                    "MEDIUM"
+                } else {
+                    "LOW"
+                };
+
+                println!("\n🔀 Route: {} | Complexity: {} | Est. {}ms\n",
+                    decision.route, complexity, estimate.local_ms);
+                print!("🤖 Assistant: ");
+                io::stdout().flush().ok();
+
+                // Call backend with context payload
+                if let Some(mut sess) = session.current_session_mut() {
 
                     // Route to appropriate backend
                     let result = match decision.route {
@@ -304,6 +310,11 @@ pub async fn run(
                                 Route::CloudClaude => crate::session::models::RouteTaken::CloudClaude,
                                 Route::CloudGemini => crate::session::models::RouteTaken::CloudGemini,
                                 Route::CloudCursor => crate::session::models::RouteTaken::CloudCursor,
+                            };
+                            let backend_name = match decision.route {
+                                Route::CloudClaude => "claude",
+                                Route::CloudGemini => "gemini",
+                                _ => "ollama",
                             };
                             let asst_turn = Turn::new_assistant(
                                 response.clone(),

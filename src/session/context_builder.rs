@@ -21,6 +21,39 @@ pub struct PayloadMetadata {
     pub tier_tokens: [u32; 5],
     pub session_depth: u32,
     pub compression_factor: f64,
+    pub num_active_files: u32,
+}
+
+impl ContextPayload {
+    /// Extract context metrics for routing decisions
+    pub fn metrics(&self) -> crate::latency::ContextMetrics {
+        crate::latency::ContextMetrics {
+            conversation_history_tokens: self.metadata.tier_tokens[1] + self.metadata.tier_tokens[2],
+            num_turns: self.metadata.session_depth,
+            num_active_files: self.metadata.num_active_files,
+            total_payload_tokens: self.metadata.total_tokens,
+            code_context_tokens: self.metadata.tier_tokens[3],
+        }
+    }
+}
+
+impl Default for ContextPayload {
+    fn default() -> Self {
+        Self {
+            tier1_system: String::new(),
+            tier2_summaries: String::new(),
+            tier3_recent_turns: String::new(),
+            tier4_code_context: String::new(),
+            tier5_prompt: String::new(),
+            metadata: PayloadMetadata {
+                total_tokens: 0,
+                tier_tokens: [0; 5],
+                session_depth: 0,
+                compression_factor: 1.0,
+                num_active_files: 0,
+            },
+        }
+    }
 }
 
 pub struct ContextBuilder;
@@ -86,6 +119,7 @@ impl ContextBuilder {
                 tier_tokens,
                 session_depth: session.metadata.total_turns,
                 compression_factor,
+                num_active_files: session.active_files.len() as u32,
             },
         }
     }

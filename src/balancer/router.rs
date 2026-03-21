@@ -1,7 +1,7 @@
 use super::{Route, RouteScorer};
 use crate::config::Config;
 use crate::intake::parser::Intent;
-use crate::latency::LatencyEstimate;
+use crate::latency::{LatencyEstimate, ContextMetrics};
 
 pub struct Router {
     config: Config,
@@ -34,6 +34,7 @@ impl Router {
         &self,
         intent: Intent,
         latency_estimate: &LatencyEstimate,
+        context: &ContextMetrics,
     ) -> RoutingDecision {
         let intent_str = format!("{:?}", intent).to_lowercase();
 
@@ -68,11 +69,11 @@ impl Router {
         }
 
         // Score all routes
-        let local_score = self.scorer.score_local(latency_estimate, &self.config);
-        let hybrid_score = self.scorer.score_hybrid(latency_estimate, &self.config);
-        let cloud_gemini_score = self.scorer.score_cloud_gemini(latency_estimate, &self.config);
-        let cloud_claude_score = self.scorer.score_cloud_claude(latency_estimate, &self.config);
-        let cloud_cursor_score = self.scorer.score_cloud_cursor(latency_estimate, &self.config);
+        let local_score = self.scorer.score_local(latency_estimate, &self.config, context);
+        let hybrid_score = self.scorer.score_hybrid(latency_estimate, &self.config, context);
+        let cloud_gemini_score = self.scorer.score_cloud_gemini(latency_estimate, &self.config, context);
+        let cloud_claude_score = self.scorer.score_cloud_claude(latency_estimate, &self.config, context);
+        let cloud_cursor_score = self.scorer.score_cloud_cursor(latency_estimate, &self.config, context);
 
         let scores = RoutingScores {
             local: local_score,

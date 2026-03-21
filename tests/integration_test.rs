@@ -60,7 +60,8 @@ fn test_router_decision() {
         confidence: 0.75,
     };
 
-    let decision = router.decide(Intent::ExplainCode, &latency);
+    let context = lokahi::latency::ContextMetrics::default();
+    let decision = router.decide(Intent::ExplainCode, &latency, &context);
     // ExplainCode should be forced local
     assert_eq!(decision.route, lokahi::balancer::Route::Local);
 }

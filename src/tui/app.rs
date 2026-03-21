@@ -152,9 +152,12 @@ impl App {
             system_load,
         )?;
 
-        // 4. Route decision (force LOCAL for now)
-        let mut decision = self.router.decide(intent.clone(), &estimate);
-        decision.route = crate::balancer::Route::Local;
+        // 4. Build context payload BEFORE routing (for context-aware complexity)
+        let payload = ContextBuilder::build(session, &translated_input, "claude", &self.config, false);
+        let context_metrics = payload.metrics();
+
+        // 5. Route decision with context-aware scoring
+        let decision = self.router.decide(intent.clone(), &estimate, &context_metrics);
         self.status.route = format!("{:?}", decision.route);
         self.status.predicted_ms = (if decision.route.to_string().contains("Cloud") {
             estimate.cloud_ms
@@ -162,15 +165,6 @@ impl App {
             estimate.local_ms
         }) as u32;
         self.status.session_depth = session.turns.len() as u32;
-
-        // 5. Build context payload
-        let backend_name = match &decision.route {
-            route if route.to_string().contains("Claude") => "claude",
-            route if route.to_string().contains("Gemini") => "gemini",
-            _ => "ollama",
-        };
-
-        let payload = ContextBuilder::build(session, &translated_input, backend_name, &self.config, false);
 
         // 6. Spawn backend call and get receiver directly
         let route_clone = decision.route.clone();

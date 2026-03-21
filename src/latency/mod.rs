@@ -14,3 +14,12 @@ pub struct LatencyEstimate {
     pub cloud_ms: u32,
     pub confidence: f64,
 }
+
+#[derive(Debug, Clone, Default)]
+pub struct ContextMetrics {
+    pub conversation_history_tokens: u32,  // tier2 + tier3
+    pub num_turns: u32,                    // total turns in session
+    pub num_active_files: u32,             // files being tracked
+    pub total_payload_tokens: u32,         // entire context payload
+    pub code_context_tokens: u32,          // tier4 tokens
+}
