@@ -2,6 +2,15 @@
 name = "lokahi"
 version = "0.1.0"
 edition = "2021"
+authors = ["LOKAHI Contributors"]
+description = "Local LLM Router - Intelligent prompt routing with streaming, filesystem context, and history"
+repository = "https://github.com/rickeshtn/lokahi"
+homepage = "https://github.com/rickeshtn/lokahi"
+documentation = "https://github.com/rickeshtn/lokahi#readme"
+readme = "README.md"
+license = "MIT"
+keywords = ["llm", "router", "ollama", "cli", "streaming"]
+categories = ["command-line-utilities", "development-tools"]
 
 [dependencies]
 tokio = { version = "1.25", features = ["macros", "rt-multi-thread", "process", "io-util"] }

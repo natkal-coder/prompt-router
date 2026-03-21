@@ -1,0 +1,35 @@
+{
+  "name": "lokahi-cli",
+  "version": "0.1.0",
+  "description": "Local LLM Router - Intelligent prompt routing with streaming, filesystem context, and history",
+  "main": "index.js",
+  "bin": {
+    "lokahi": "./bin/lokahi.js"
+  },
+  "scripts": {
+    "postinstall": "node bin/download.js",
+    "test": "echo \"Tests run with cargo test\""
+  },
+  "keywords": [
+    "llm",
+    "router",
+    "ollama",
+    "local-ai",
+    "streaming",
+    "cli"
+  ],
+  "author": "LOKAHI Contributors",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/rickeshtn/lokahi.git"
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  },
+  "preferGlobal": true,
+  "os": [
+    "linux",
+    "darwin"
+  ]
+}
