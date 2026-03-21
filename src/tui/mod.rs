@@ -21,9 +21,21 @@ use crate::session::context_builder::{ContextBuilder, ContextPayload};
 fn translate_path_for_docker(input: &str) -> String {
     let host_home = env::var("HOST_HOME").unwrap_or_else(|_| "/host".to_string());
 
+    // Handle ~/Projects specially → /work/projects
+    if input.starts_with("~/Projects") {
+        return input.replace("~/Projects", "/work/projects");
+    }
+
+    // Handle ~/other paths → /host/other
     if input.starts_with("~/") {
         return format!("{}/{}", host_home, &input[2..]);
     }
+
+    // /home/rickeshtn/Projects/... → /work/projects/...
+    if input.starts_with("/home/") && input.contains("Projects") {
+        return input.replace("/home/rickeshtn/Projects", "/work/projects");
+    }
+
     // /home/rickeshtn/... → /host/rickeshtn/...
     if input.starts_with("/home/") {
         let rest = &input[6..]; // Remove "/home/"
