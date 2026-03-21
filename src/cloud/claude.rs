@@ -3,7 +3,7 @@ use crate::session::ContextPayload;
 use anyhow::Result;
 use async_trait::async_trait;
 use std::process::Stdio;
-use tokio::io::{AsyncBufReadExt, BufReader};
+use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::Command;
 
 #[derive(Clone)]
@@ -39,12 +39,18 @@ impl CloudBackend for ClaudeBackend {
     async fn send(&self, context: &ContextPayload) -> Result<String> {
         let prompt = self.build_prompt(context);
 
-        let output = Command::new(&self.command)
+        let mut child = Command::new(&self.command)
             .arg("--print")
-            .arg("-p")
-            .arg(&prompt)
-            .output()
-            .await?;
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()?;
+
+        if let Some(mut stdin) = child.stdin.take() {
+            stdin.write_all(prompt.as_bytes()).await?;
+        }
+
+        let output = child.wait_with_output().await?;
 
         if output.status.success() {
             Ok(String::from_utf8_lossy(&output.stdout).to_string())
@@ -65,14 +71,17 @@ impl CloudBackend for ClaudeBackend {
         let command = self.command.clone();
 
         tokio::spawn(async move {
-            match Command::new(command)
+            match Command::new(&command)
                 .arg("--print")
-                .arg("-p")
-                .arg(&prompt)
+                .stdin(Stdio::piped())
                 .stdout(Stdio::piped())
                 .spawn()
             {
                 Ok(mut child) => {
+                    if let Some(mut stdin) = child.stdin.take() {
+                        let _ = stdin.write_all(prompt.as_bytes()).await;
+                    }
+
                     if let Some(stdout) = child.stdout.take() {
                         let reader = BufReader::new(stdout);
                         let mut lines = reader.lines();

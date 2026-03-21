@@ -8,8 +8,11 @@ use crate::config::Config;
 use crate::session::manager::SessionManager;
 use crate::session::models::Turn;
 use crate::latency::predictor::LatencyPredictor;
-use crate::balancer::router::Router;
+use crate::balancer::{router::Router, Route};
 use crate::local::ollama::OllamaClient;
+use crate::cloud::claude::ClaudeBackend;
+use crate::cloud::gemini::GeminiBackend;
+use crate::cloud::adapter::CloudBackend;
 use crate::feedback::collector::FeedbackCollector;
 use crate::intake::parser::{classify_intent, analyze_prompt};
 use crate::session::context_builder::ContextBuilder;
@@ -154,9 +157,7 @@ pub async fn run(
                     0.5,
                 )?;
 
-                let mut decision = router.decide(intent, &estimate);
-                // Force LOCAL for now (no cloud backends)
-                decision.route = crate::balancer::Route::Local;
+                let decision = router.decide(intent, &estimate);
 
                 // Show routing decision with complexity info
                 let complexity = if input.len() > 200 || input.matches("~").count() > 2 {
@@ -190,21 +191,99 @@ pub async fn run(
                     let original_root = sess.project_root.clone();
                     sess.project_root = context_path;
 
-                    let payload = ContextBuilder::build(&sess, &translated_input, "ollama", &config, false);
+                    let backend_name = match decision.route {
+                        Route::CloudClaude => "claude",
+                        Route::CloudGemini => "gemini",
+                        _ => "ollama",
+                    };
+
+                    let payload = ContextBuilder::build(&sess, &translated_input, backend_name, &config, false);
 
                     // Restore original project_root
                     sess.project_root = original_root;
 
-                    let prompt = format!(
-                        "{}\n{}\n{}\n{}\n{}",
-                        payload.tier1_system,
-                        payload.tier2_summaries,
-                        payload.tier3_recent_turns,
-                        payload.tier4_code_context,
-                        payload.tier5_prompt
-                    );
+                    // Route to appropriate backend
+                    let result = match decision.route {
+                        Route::Local => {
+                            let prompt = format!(
+                                "{}\n{}\n{}\n{}\n{}",
+                                payload.tier1_system,
+                                payload.tier2_summaries,
+                                payload.tier3_recent_turns,
+                                payload.tier4_code_context,
+                                payload.tier5_prompt
+                            );
+                            ollama.generate_streaming(&prompt, 512).await
+                        }
+                        Route::CloudClaude => {
+                            let claude = ClaudeBackend::new("claude");
+                            match claude.send_streaming(&payload).await {
+                                Ok(rx) => Ok(rx),
+                                Err(e) => {
+                                    eprintln!("Claude unavailable ({}), falling back to local", e);
+                                    let prompt = format!(
+                                        "{}\n{}\n{}\n{}\n{}",
+                                        payload.tier1_system,
+                                        payload.tier2_summaries,
+                                        payload.tier3_recent_turns,
+                                        payload.tier4_code_context,
+                                        payload.tier5_prompt
+                                    );
+                                    ollama.generate_streaming(&prompt, 512).await
+                                }
+                            }
+                        }
+                        Route::CloudGemini => {
+                            let gemini = GeminiBackend::new("gemini");
+                            match gemini.send_streaming(&payload).await {
+                                Ok(rx) => Ok(rx),
+                                Err(e) => {
+                                    eprintln!("Gemini unavailable ({}), falling back to local", e);
+                                    let prompt = format!(
+                                        "{}\n{}\n{}\n{}\n{}",
+                                        payload.tier1_system,
+                                        payload.tier2_summaries,
+                                        payload.tier3_recent_turns,
+                                        payload.tier4_code_context,
+                                        payload.tier5_prompt
+                                    );
+                                    ollama.generate_streaming(&prompt, 512).await
+                                }
+                            }
+                        }
+                        Route::Hybrid => {
+                            // For now, treat hybrid as local with self-critique (Phase 2)
+                            let prompt = format!(
+                                "{}\n{}\n{}\n{}\n{}",
+                                payload.tier1_system,
+                                payload.tier2_summaries,
+                                payload.tier3_recent_turns,
+                                payload.tier4_code_context,
+                                payload.tier5_prompt
+                            );
+                            ollama.generate_streaming(&prompt, 512).await
+                        }
+                        Route::CloudCursor => {
+                            // Cursor not supported yet, fallback to Claude then local
+                            let claude = ClaudeBackend::new("claude");
+                            match claude.send_streaming(&payload).await {
+                                Ok(rx) => Ok(rx),
+                                Err(_) => {
+                                    let prompt = format!(
+                                        "{}\n{}\n{}\n{}\n{}",
+                                        payload.tier1_system,
+                                        payload.tier2_summaries,
+                                        payload.tier3_recent_turns,
+                                        payload.tier4_code_context,
+                                        payload.tier5_prompt
+                                    );
+                                    ollama.generate_streaming(&prompt, 512).await
+                                }
+                            }
+                        }
+                    };
 
-                    match ollama.generate_streaming(&prompt, 512).await {
+                    match result {
                         Ok(mut rx) => {
                             let mut response = String::new();
                             while let Ok(Some(chunk)) = io::Result::Ok(rx.recv().await) {
@@ -216,11 +295,17 @@ pub async fn run(
 
                             // Save to history
                             let user_turn = Turn::new_user(input.to_string(), 100);
+                            let route_taken = match decision.route {
+                                Route::Local | Route::Hybrid => crate::session::models::RouteTaken::Local,
+                                Route::CloudClaude => crate::session::models::RouteTaken::CloudClaude,
+                                Route::CloudGemini => crate::session::models::RouteTaken::CloudGemini,
+                                Route::CloudCursor => crate::session::models::RouteTaken::CloudCursor,
+                            };
                             let asst_turn = Turn::new_assistant(
                                 response.clone(),
                                 response.len() as u32 / 4,
-                                crate::session::models::RouteTaken::Local,
-                                "ollama".to_string(),
+                                route_taken,
+                                backend_name.to_string(),
                             );
                             let _ = session.commit_turn(user_turn);
                             let _ = session.commit_turn(asst_turn);
