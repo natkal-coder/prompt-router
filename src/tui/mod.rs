@@ -383,50 +383,25 @@ pub async fn run(
 }
 
 fn format_markdown(text: &str) -> String {
+    // Preserve Claude's formatting as-is, just add visual separation
     let mut output = String::new();
-    let mut in_code = false;
+    output.push_str("\n");
 
     for line in text.lines() {
-        // Code blocks
-        if line.trim().starts_with("```") {
-            in_code = !in_code;
-            if in_code {
-                output.push_str("\n╭─ CODE ─────────────────────╮\n");
-            } else {
-                output.push_str("\n╰─────────────────────────────╯\n");
-            }
-            continue;
-        }
-
-        if in_code {
-            output.push_str("  ");
-            output.push_str(line);
-            output.push('\n');
-            continue;
-        }
-
-        // Headers with spacing
+        // Add subtle visual enhancement for headers, preserve everything else
         if line.starts_with("## ") {
-            output.push_str("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
-            output.push_str(&line[3..]);
-            output.push_str("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
-        } else if line.starts_with("### ") {
-            output.push_str("\n▸ ");
-            output.push_str(&line[4..]);
-            output.push('\n');
-        } else if line.starts_with("- ") {
-            output.push_str("  • ");
-            output.push_str(&line[2..]);
-            output.push('\n');
-        } else if line.starts_with("| ") {
+            output.push_str("\n");
             output.push_str(line);
             output.push('\n');
-        } else if !line.trim().is_empty() {
+        } else if line.starts_with("### ") {
             output.push_str(line);
             output.push('\n');
         } else {
+            // Preserve all formatting: tables, lists, code blocks, etc.
+            output.push_str(line);
             output.push('\n');
         }
     }
+
     output
 }
