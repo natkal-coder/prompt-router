@@ -27,6 +27,7 @@ services:
       - lokahi_sessions:/work/data
       - /home/rickeshtn/.nvm:/home/rickeshtn/.nvm
       - /home/rickeshtn/.claude:/home/rickeshtn/.claude
+      - /home/rickeshtn/.gemini:/home/rickeshtn/.gemini
     working_dir: /work
     environment:
       - RUST_LOG=info
