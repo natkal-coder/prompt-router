@@ -269,10 +269,13 @@ pub async fn run(
                         }
                         Route::CloudGemini => {
                             let gemini = GeminiBackend::new("gemini");
-                            match gemini.send_streaming(&payload).await {
-                                Ok(rx) => Ok(rx),
-                                Err(e) => {
-                                    eprintln!("Gemini unavailable ({}), falling back to local", e);
+                            match tokio::time::timeout(
+                                std::time::Duration::from_secs(15),
+                                gemini.send_streaming(&payload)
+                            ).await {
+                                Ok(Ok(rx)) => Ok(rx),
+                                _ => {
+                                    eprintln!("Gemini unavailable, falling back to local");
                                     let prompt = format!(
                                         "{}\n{}\n{}\n{}\n{}",
                                         payload.tier1_system,

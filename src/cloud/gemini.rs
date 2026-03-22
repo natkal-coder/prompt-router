@@ -80,11 +80,17 @@ impl CloudBackend for GeminiBackend {
             match Command::new(&command)
                 .stdin(Stdio::piped())
                 .stdout(Stdio::piped())
+                .stderr(Stdio::null())
                 .spawn()
             {
                 Ok(mut child) => {
+                    // Write prompt to stdin
                     if let Some(mut stdin) = child.stdin.take() {
-                        let _ = stdin.write_all(prompt.as_bytes()).await;
+                        if let Err(e) = stdin.write_all(prompt.as_bytes()).await {
+                            tracing::error!("Failed to write to gemini stdin: {}", e);
+                        }
+                        // Drop stdin to signal EOF
+                        drop(stdin);
                     }
 
                     if let Some(stdout) = child.stdout.take() {
@@ -92,8 +98,28 @@ impl CloudBackend for GeminiBackend {
                         let mut lines = reader.lines();
 
                         while let Ok(Some(line)) = lines.next_line().await {
-                            let _ = tx.send(line).await;
+                            if let Err(_) = tx.send(line).await {
+                                break; // Receiver dropped, stop reading
+                            }
                         }
+                    }
+
+                    // Wait for child with timeout
+                    match tokio::time::timeout(
+                        std::time::Duration::from_secs(20),
+                        child.wait()
+                    ).await {
+                        Ok(Ok(status)) if !status.success() => {
+                            tracing::error!("Gemini process failed with status: {}", status);
+                        }
+                        Ok(Err(e)) => {
+                            tracing::error!("Failed to wait for gemini process: {}", e);
+                        }
+                        Err(_) => {
+                            tracing::error!("Gemini process timed out after 20s");
+                            let _ = child.kill().await;
+                        }
+                        _ => {}
                     }
                 }
                 Err(e) => {
