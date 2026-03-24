@@ -111,8 +111,14 @@ pub async fn run(
     if let Err(e) = ollama.pull_model().await {
         eprintln!("Warning: Failed to pull model: {}", e);
     } else {
-        eprintln!("Model pull initiated, waiting for download...");
-        tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+        eprintln!("Model pull initiated, waiting for download (this may take ~2 minutes for first run)...");
+        for i in 0..120 {
+            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+            if (i + 1) % 30 == 0 {
+                eprint!(".");
+            }
+        }
+        eprintln!(" Ready!");
     }
 
     // Welcome

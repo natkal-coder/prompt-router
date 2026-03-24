@@ -66,11 +66,17 @@ impl OllamaClient {
             .send()
             .await?;
 
-        let text = resp.bytes().await.unwrap_or_default();
-        let json: serde_json::Value = serde_json::from_slice(&text).unwrap_or_default();
+        let status = resp.status();
+        if !status.is_success() {
+            let text = resp.text().await.unwrap_or_default();
+            return Err(anyhow::anyhow!("Ollama error ({}): {}", status, text));
+        }
+
+        let text = resp.bytes().await?;
+        let json: serde_json::Value = serde_json::from_slice(&text)?;
         let response = json["response"]
             .as_str()
-            .unwrap_or("")
+            .ok_or_else(|| anyhow::anyhow!("No response field in Ollama reply"))?
             .to_string();
 
         Ok(response)
@@ -98,18 +104,37 @@ impl OllamaClient {
                 }
             });
 
-            if let Ok(resp) = client
+            match client
                 .post(format!("{}/api/generate", base_url))
                 .json(&body)
                 .send()
                 .await
             {
-                if let Ok(bytes) = resp.bytes().await {
-                    if let Ok(json) = serde_json::from_slice::<serde_json::Value>(&bytes) {
-                        if let Some(response_text) = json["response"].as_str() {
-                            let _ = tx.send(response_text.to_string()).await;
+                Ok(resp) => {
+                    if !resp.status().is_success() {
+                        eprintln!("Ollama API error: {}", resp.status());
+                        if let Ok(text) = resp.text().await {
+                            eprintln!("  Response: {}", text);
                         }
+                        return;
                     }
+
+                    if let Ok(bytes) = resp.bytes().await {
+                        if let Ok(json) = serde_json::from_slice::<serde_json::Value>(&bytes) {
+                            if let Some(response_text) = json["response"].as_str() {
+                                let _ = tx.send(response_text.to_string()).await;
+                            } else {
+                                eprintln!("No response field in Ollama reply");
+                            }
+                        } else {
+                            eprintln!("Failed to parse Ollama JSON response");
+                        }
+                    } else {
+                        eprintln!("Failed to read Ollama response bytes");
+                    }
+                }
+                Err(e) => {
+                    eprintln!("Ollama request failed: {}", e);
                 }
             }
         });
