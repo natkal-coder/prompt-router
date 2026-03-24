@@ -62,57 +62,43 @@ impl CloudBackend for GeminiBackend {
         let prompt = self.build_prompt(context);
         let command = self.command.clone();
 
-        // Test spawn to check if command exists
-        match Command::new(&command).arg("--help").stdout(Stdio::null()).stderr(Stdio::null()).spawn() {
-            Err(e) => return Err(anyhow::anyhow!("Gemini command failed: {}", e)),
-            Ok(mut child) => {
-                let _ = child.wait().await;
-            }
-        }
+        let mut child = Command::new(&command)
+            .arg("--prompt")
+            .arg(&prompt)
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .spawn()?;
 
         let (tx, rx) = tokio::sync::mpsc::channel(100);
 
         tokio::spawn(async move {
-            match Command::new(&command)
-                .arg("--prompt")
-                .arg(&prompt)
-                .stdout(Stdio::piped())
-                .stderr(Stdio::null())
-                .spawn()
-            {
-                Ok(mut child) => {
-                    if let Some(stdout) = child.stdout.take() {
-                        let reader = BufReader::new(stdout);
-                        let mut lines = reader.lines();
+            if let Some(stdout) = child.stdout.take() {
+                let reader = BufReader::new(stdout);
+                let mut lines = reader.lines();
 
-                        while let Ok(Some(line)) = lines.next_line().await {
-                            if let Err(_) = tx.send(line).await {
-                                break; // Receiver dropped, stop reading
-                            }
-                        }
-                    }
-
-                    // Wait for child with timeout
-                    match tokio::time::timeout(
-                        std::time::Duration::from_secs(20),
-                        child.wait()
-                    ).await {
-                        Ok(Ok(status)) if !status.success() => {
-                            tracing::error!("Gemini process failed with status: {}", status);
-                        }
-                        Ok(Err(e)) => {
-                            tracing::error!("Failed to wait for gemini process: {}", e);
-                        }
-                        Err(_) => {
-                            tracing::error!("Gemini process timed out after 20s");
-                            let _ = child.kill().await;
-                        }
-                        _ => {}
+                while let Ok(Some(line)) = lines.next_line().await {
+                    if let Err(_) = tx.send(line).await {
+                        break;
                     }
                 }
-                Err(e) => {
-                    tracing::error!("Failed to spawn gemini command: {}", e);
+            }
+
+            // Wait for child to finish
+            match tokio::time::timeout(
+                std::time::Duration::from_secs(15),
+                child.wait()
+            ).await {
+                Ok(Ok(status)) if !status.success() => {
+                    tracing::error!("Gemini process exited with status: {}", status);
                 }
+                Ok(Err(e)) => {
+                    tracing::error!("Failed to wait for gemini: {}", e);
+                }
+                Err(_) => {
+                    tracing::error!("Gemini process timeout");
+                    let _ = child.kill().await;
+                }
+                _ => {}
             }
         });
 
