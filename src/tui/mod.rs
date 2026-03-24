@@ -268,14 +268,12 @@ pub async fn run(
                             }
                         }
                         Route::CloudGemini => {
-                            let gemini = GeminiBackend::new("gemini");
-                            match tokio::time::timeout(
-                                std::time::Duration::from_secs(15),
-                                gemini.send_streaming(&payload)
-                            ).await {
-                                Ok(Ok(rx)) => Ok(rx),
-                                _ => {
-                                    eprintln!("Gemini unavailable, falling back to local");
+                            // Gemini currently rate-limited, fall back to Claude
+                            let claude = ClaudeBackend::new("claude");
+                            match claude.send_streaming(&payload).await {
+                                Ok(rx) => Ok(rx),
+                                Err(e) => {
+                                    eprintln!("Claude unavailable ({}), falling back to local", e);
                                     let prompt = format!(
                                         "{}\n{}\n{}\n{}\n{}",
                                         payload.tier1_system,
