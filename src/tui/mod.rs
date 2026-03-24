@@ -107,6 +107,14 @@ pub async fn run(
         None
     };
 
+    // Pull model if not present
+    if let Err(e) = ollama.pull_model().await {
+        eprintln!("Warning: Failed to pull model: {}", e);
+    } else {
+        eprintln!("Model pull initiated, waiting for download...");
+        tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+    }
+
     // Welcome
     println!("\n🚀 LOKAHI - Local LLM Router");
     println!("═══════════════════════════════════════════");
@@ -237,85 +245,19 @@ pub async fn run(
                 if let Some(mut sess) = session.current_session_mut() {
 
                     // Route to appropriate backend
-                    let result = match decision.route {
-                        Route::Local => {
-                            let prompt = format!(
-                                "{}\n{}\n{}\n{}\n{}",
-                                payload.tier1_system,
-                                payload.tier2_summaries,
-                                payload.tier3_recent_turns,
-                                payload.tier4_code_context,
-                                payload.tier5_prompt
-                            );
-                            ollama.generate_streaming(&prompt, 512).await
-                        }
-                        Route::CloudClaude => {
-                            let claude = ClaudeBackend::new("claude");
-                            match claude.send_streaming(&payload).await {
-                                Ok(rx) => Ok(rx),
-                                Err(e) => {
-                                    eprintln!("Claude unavailable ({}), falling back to local", e);
-                                    let prompt = format!(
-                                        "{}\n{}\n{}\n{}\n{}",
-                                        payload.tier1_system,
-                                        payload.tier2_summaries,
-                                        payload.tier3_recent_turns,
-                                        payload.tier4_code_context,
-                                        payload.tier5_prompt
-                                    );
-                                    ollama.generate_streaming(&prompt, 512).await
-                                }
-                            }
-                        }
-                        Route::CloudGemini => {
-                            // Gemini currently rate-limited, fall back to Claude
-                            let claude = ClaudeBackend::new("claude");
-                            match claude.send_streaming(&payload).await {
-                                Ok(rx) => Ok(rx),
-                                Err(e) => {
-                                    eprintln!("Claude unavailable ({}), falling back to local", e);
-                                    let prompt = format!(
-                                        "{}\n{}\n{}\n{}\n{}",
-                                        payload.tier1_system,
-                                        payload.tier2_summaries,
-                                        payload.tier3_recent_turns,
-                                        payload.tier4_code_context,
-                                        payload.tier5_prompt
-                                    );
-                                    ollama.generate_streaming(&prompt, 512).await
-                                }
-                            }
-                        }
-                        Route::Hybrid => {
-                            // For now, treat hybrid as local with self-critique (Phase 2)
-                            let prompt = format!(
-                                "{}\n{}\n{}\n{}\n{}",
-                                payload.tier1_system,
-                                payload.tier2_summaries,
-                                payload.tier3_recent_turns,
-                                payload.tier4_code_context,
-                                payload.tier5_prompt
-                            );
-                            ollama.generate_streaming(&prompt, 512).await
-                        }
-                        Route::CloudCursor => {
-                            // Cursor not supported yet, fallback to Claude then local
-                            let claude = ClaudeBackend::new("claude");
-                            match claude.send_streaming(&payload).await {
-                                Ok(rx) => Ok(rx),
-                                Err(_) => {
-                                    let prompt = format!(
-                                        "{}\n{}\n{}\n{}\n{}",
-                                        payload.tier1_system,
-                                        payload.tier2_summaries,
-                                        payload.tier3_recent_turns,
-                                        payload.tier4_code_context,
-                                        payload.tier5_prompt
-                                    );
-                                    ollama.generate_streaming(&prompt, 512).await
-                                }
-                            }
-                        }
+                    // NOTE: Cloud backends (Claude, Gemini) are currently hanging
+                    // TODO: Debug authentication/API connection issues
+                    let result = {
+                        let prompt = format!(
+                            "{}\n{}\n{}\n{}\n{}",
+                            payload.tier1_system,
+                            payload.tier2_summaries,
+                            payload.tier3_recent_turns,
+                            payload.tier4_code_context,
+                            payload.tier5_prompt
+                        );
+                        eprintln!("Using local Ollama (cloud backends unavailable)");
+                        ollama.generate_streaming(&prompt, 512).await
                     };
 
                     match result {

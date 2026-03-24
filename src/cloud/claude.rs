@@ -72,9 +72,13 @@ impl CloudBackend for ClaudeBackend {
         let command = self.command.clone();
 
         // Test if command exists
-        match Command::new(&command).arg("-p").arg("").output().await {
-            Err(e) => return Err(anyhow::anyhow!("Claude command failed: {}", e)),
-            Ok(_) => {} // Command exists
+        match tokio::time::timeout(
+            std::time::Duration::from_secs(3),
+            Command::new(&command).arg("-p").arg("").output()
+        ).await {
+            Err(_) => return Err(anyhow::anyhow!("Claude command timeout")),
+            Ok(Err(e)) => return Err(anyhow::anyhow!("Claude command failed: {}", e)),
+            Ok(Ok(_)) => {} // Command exists
         }
 
         let (tx, rx) = tokio::sync::mpsc::channel(100);
@@ -87,15 +91,28 @@ impl CloudBackend for ClaudeBackend {
                         .arg("-p")
                         .stdin(stdin_file)
                         .stdout(Stdio::piped())
+                        .stderr(Stdio::null())
                         .spawn()
                     {
                         Ok(mut child) => {
-                            if let Some(stdout) = child.stdout.take() {
-                                let reader = BufReader::new(stdout);
-                                let mut lines = reader.lines();
+                            // Timeout reading from claude
+                            match tokio::time::timeout(
+                                std::time::Duration::from_secs(30),
+                                async {
+                                    if let Some(stdout) = child.stdout.take() {
+                                        let reader = BufReader::new(stdout);
+                                        let mut lines = reader.lines();
 
-                                while let Ok(Some(line)) = lines.next_line().await {
-                                    let _ = tx.send(line).await;
+                                        while let Ok(Some(line)) = lines.next_line().await {
+                                            let _ = tx.send(line).await;
+                                        }
+                                    }
+                                }
+                            ).await {
+                                Ok(_) => {}
+                                Err(_) => {
+                                    tracing::error!("Claude response timeout");
+                                    let _ = child.kill().await;
                                 }
                             }
                         }
