@@ -3,7 +3,7 @@ use crate::session::ContextPayload;
 use anyhow::Result;
 use async_trait::async_trait;
 use std::process::Stdio;
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
 
 #[derive(Clone)]
@@ -39,17 +39,11 @@ impl CloudBackend for GeminiBackend {
     async fn send(&self, context: &ContextPayload) -> Result<String> {
         let prompt = self.build_prompt(context);
 
-        let mut child = Command::new(&self.command)
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()?;
-
-        if let Some(mut stdin) = child.stdin.take() {
-            stdin.write_all(prompt.as_bytes()).await?;
-        }
-
-        let output = child.wait_with_output().await?;
+        let output = Command::new(&self.command)
+            .arg("--prompt")
+            .arg(&prompt)
+            .output()
+            .await?;
 
         if output.status.success() {
             Ok(String::from_utf8_lossy(&output.stdout).to_string())
@@ -69,30 +63,24 @@ impl CloudBackend for GeminiBackend {
         let command = self.command.clone();
 
         // Test spawn to check if command exists
-        match Command::new(&command).stdin(Stdio::piped()).stdout(Stdio::piped()).spawn() {
+        match Command::new(&command).arg("--help").stdout(Stdio::null()).stderr(Stdio::null()).spawn() {
             Err(e) => return Err(anyhow::anyhow!("Gemini command failed: {}", e)),
-            Ok(_) => {} // Command exists, continue
+            Ok(mut child) => {
+                let _ = child.wait().await;
+            }
         }
 
         let (tx, rx) = tokio::sync::mpsc::channel(100);
 
         tokio::spawn(async move {
             match Command::new(&command)
-                .stdin(Stdio::piped())
+                .arg("--prompt")
+                .arg(&prompt)
                 .stdout(Stdio::piped())
                 .stderr(Stdio::null())
                 .spawn()
             {
                 Ok(mut child) => {
-                    // Write prompt to stdin
-                    if let Some(mut stdin) = child.stdin.take() {
-                        if let Err(e) = stdin.write_all(prompt.as_bytes()).await {
-                            tracing::error!("Failed to write to gemini stdin: {}", e);
-                        }
-                        // Drop stdin to signal EOF
-                        drop(stdin);
-                    }
-
                     if let Some(stdout) = child.stdout.take() {
                         let reader = BufReader::new(stdout);
                         let mut lines = reader.lines();
